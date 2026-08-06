@@ -41,10 +41,10 @@ cp .env.example .env      # 값 채우기 (LiteLLM 키, GitHub OAuth Client ID �
 ollama pull gemma4:31b bge-m3
 
 # 4) 서버
-cd backend && ../.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8720
+cd backend && ../.venv/bin/uvicorn app:app --host 0.0.0.0 --port <PORT>
 ```
 
-→ 브라우저 `http://localhost:8720`
+→ 브라우저에서 해당 포트로 접속
 
 ## 사용 흐름
 
