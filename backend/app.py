@@ -67,6 +67,7 @@ async def nodes():
         s["backend"] = _BACKEND_INFO.get(s["model"]) or ("로컬 Ollama" if "local" in s["name"] else None)
         if "local" in s["name"]:
             s["backend"] = "이 머신 (GB10)"
+        s.pop("url", None)   # 실제 노드 URL은 응답에서 제거(노출 금지)
     return {"nodes": stats}
 
 
@@ -85,8 +86,8 @@ async def _fetch_backend(s: dict):
             for m in r.json().get("data", []):
                 if m.get("model_name") == s["model"]:
                     p = m.get("litellm_params", {})
-                    host = p.get("api_base", "?").replace("http://", "")
-                    return f"{host} · {p.get('model', '')}"
+                    model = p.get("model", "")
+                    return f"사내 GPU 노드 · {model}"   # 실제 IP·포트는 마스킹(노출 금지)
     except Exception:
         return None
 
