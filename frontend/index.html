@@ -73,12 +73,6 @@
   .row > input[type=text]#repo { flex:1; min-width:220px; }
   .hint { font-size:12px; color:var(--muted); }
   /* 토큰 입력 */
-  .tokenbox { display:inline-flex; align-items:center; gap:6px; background:#fff;
-    border:1px solid var(--border); border-radius:9px; padding:0 10px; width:230px; transition:border-color .15s,box-shadow .15s; }
-  .tokenbox:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-bg); }
-  .tokenbox.need { border-color:var(--medium); box-shadow:0 0 0 3px var(--medium-bg); }
-  .tokenbox .ic { font-size:13px; opacity:.6; }
-  .tokenbox input { border:0; outline:0; background:transparent; padding:9px 0; width:100%; font-size:13px; }
   .token-hint { display:flex; align-items:center; gap:8px; margin-top:12px; padding:10px 14px;
     background:var(--medium-bg); border:1px solid #ffd8a8; border-radius:10px; font-size:13px; color:var(--medium); }
   .token-hint a { color:var(--accent); font-weight:600; text-decoration:none; margin-left:auto; white-space:nowrap; }
@@ -217,16 +211,12 @@
           </select>
           <button class="btn-ghost" id="delBtn" onclick="delRepo()" title="선택 레포 삭제" style="padding:9px 12px">🗑</button>
           <input id="repo" type="text" placeholder="GitHub URL (https://github.com/org/repo)">
-          <label class="tokenbox" id="tokenbox" title="private 레포일 때만 필요">
-            <span class="ic">🔑</span>
-            <input id="ghtoken" type="password" placeholder="GitHub 토큰 (private용)" autocomplete="off">
-          </label>
           <button class="btn-primary" id="ingestBtn" onclick="ingest()">가져오기 · 인덱싱</button>
           <button class="btn-ghost" id="qaBtn" onclick="runQA()" disabled>QA 분석 실행</button>
         </div>
         <div class="token-hint" id="tokenHint" style="display:none">
-          🔒 <span>private 레포로 보입니다. GitHub 토큰을 입력하고 다시 시도하세요.</span>
-          <a href="https://github.com/settings/tokens?type=beta" target="_blank">토큰 만들기 →</a>
+          🔒 <span>private 레포입니다. 우상단 <b>GitHub 로그인</b> 후 다시 시도하세요.</span>
+          <a href="#" onclick="login();return false;">로그인 →</a>
         </div>
         <div class="prog" id="prog" style="display:none">
           <div class="ptext"><span id="progLabel"></span><span id="progPct"></span></div>
@@ -294,8 +284,6 @@ async function refreshAuth(){
 }
 
 function setLoggedIn(on){
-  // 로그인하면 토큰칸 숨김(불필요)
-  document.getElementById('tokenbox').style.display = on ? 'none' : '';
   loadRepos();  // 로그인 상태 따라 목록 갱신(내 레포만)
 }
 
@@ -387,15 +375,8 @@ function enableChatInputs(){       // 대화 입력 활성 (QA 완료 or 기존 
   document.getElementById('q').disabled = false;
   document.getElementById('sendBtn').disabled = false;
 }
-function showTokenHint(){
-  document.getElementById('tokenHint').style.display = 'flex';
-  document.getElementById('tokenbox').classList.add('need');
-  document.getElementById('ghtoken').focus();
-}
-function hideTokenHint(){
-  document.getElementById('tokenHint').style.display = 'none';
-  document.getElementById('tokenbox').classList.remove('need');
-}
+function showTokenHint(){ document.getElementById('tokenHint').style.display = 'flex'; }
+function hideTokenHint(){ document.getElementById('tokenHint').style.display = 'none'; }
 
 async function loadRepos(){
   try{
@@ -428,7 +409,7 @@ async function ingest(){
   setStep(2);
   document.getElementById('ingestBtn').disabled = true;
   const r = await fetch('/api/ingest',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({source:src, token:document.getElementById('ghtoken').value.trim(), session:SESSION})});
+    body:JSON.stringify({source:src, session:SESSION})});
   const j = await r.json();
   if(!r.ok){
     document.getElementById('ingestBtn').disabled = false;

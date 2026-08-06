@@ -3,13 +3,34 @@
 토큰은 서버 메모리(SESSIONS)에만. 클라이언트는 불투명 session_id만 가짐.
 """
 from __future__ import annotations
+import json
+import os
 import secrets
 import httpx
 
-from config import GITHUB_CLIENT_ID
+from config import GITHUB_CLIENT_ID, _DATA
 
-SESSIONS: dict[str, dict] = {}   # session_id -> {token, login}
 _H = {"Accept": "application/json"}
+_SPATH = os.path.join(_DATA, "sessions.json")
+
+
+def _load_sessions() -> dict:
+    if os.path.exists(_SPATH):
+        try:
+            with open(_SPATH, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_sessions():
+    os.makedirs(_DATA, exist_ok=True)
+    with open(_SPATH, "w", encoding="utf-8") as f:
+        json.dump(SESSIONS, f)
+
+
+SESSIONS: dict[str, dict] = _load_sessions()   # session_id -> {token, login} (재시작 후에도 유지)
 
 
 async def device_start() -> dict:
@@ -33,6 +54,7 @@ async def device_poll(device_code: str) -> dict:
         login = await _whoami(token)
         sid = secrets.token_urlsafe(24)
         SESSIONS[sid] = {"token": token, "login": login}
+        _save_sessions()
         return {"status": "ok", "session": sid, "login": login}
     # authorization_pending / slow_down / expired_token / access_denied
     return {"status": j.get("error", "pending")}
@@ -55,3 +77,4 @@ def login_for(session: str) -> str | None:
 
 def logout(session: str):
     SESSIONS.pop(session, None)
+    _save_sessions()
