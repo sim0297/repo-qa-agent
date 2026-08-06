@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+httpx
+chromadb
+tree-sitter
+tree-sitter-language-pack
+# ponytail: Phase 1까지. radon/정적도구는 Phase 2에서.

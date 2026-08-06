@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Repo QA Agent</title>
+<style>
+  :root {
+    --bg:#f4f6f9; --card:#ffffff; --border:#e1e6ec; --text:#1f2328;
+    --muted:#69707a; --accent:#0969da; --accent-bg:#eaf3ff;
+    --high:#d1242f; --high-bg:#fff0f0; --medium:#bc4c00; --medium-bg:#fff5eb;
+    --low:#57606a; --low-bg:#f3f5f7; --ok:#1a7f37;
+    --shadow:0 1px 4px rgba(31,35,40,.07);
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { font:14px/1.6 -apple-system,"Segoe UI",system-ui,"Malgun Gothic",sans-serif;
+         background:var(--bg); color:var(--text); }
+  input,button,select { font:inherit; }
+  input[type=text],select { background:#fff; border:1px solid var(--border); color:var(--text);
+    border-radius:9px; padding:9px 12px; }
+  button { border:0; border-radius:9px; padding:9px 16px; cursor:pointer; font-weight:600; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-ghost { background:#fff; color:var(--text); border:1px solid var(--border); }
+  button:disabled { opacity:.4; cursor:default; }
+
+  header { position:sticky; top:0; z-index:10; background:rgba(255,255,255,.9);
+    backdrop-filter:blur(10px); border-bottom:1px solid var(--border);
+    padding:12px 20px; display:flex; gap:10px; align-items:center; }
+  .brand { font-size:16px; font-weight:800; letter-spacing:-.3px; }
+  .brand span { color:var(--accent); }
+  header .sp { margin-left:auto; }
+
+  .app { display:flex; height:calc(100vh - 57px); }
+
+  /* 좌측 사이드바: 노드 현황 */
+  .sidebar { width:250px; flex:0 0 auto; border-right:1px solid var(--border);
+    background:#fbfcfe; overflow:auto; padding:16px 14px; }
+  .sidebar h3 { font-size:11px; text-transform:uppercase; letter-spacing:.6px;
+    color:var(--muted); margin:0 0 10px; }
+  .ncard { background:#fff; border:1px solid var(--border); border-radius:12px;
+    padding:12px; margin-bottom:10px; box-shadow:var(--shadow); }
+  .ncard .nh { display:flex; align-items:center; gap:7px; font-weight:700; font-size:13px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--ok); flex:0 0 auto; }
+  .dot.bad { background:var(--high); }
+  .ncard .nm { font-family:ui-monospace,monospace; font-size:11px; color:var(--muted); margin:3px 0 8px; }
+  .ncard .backend { font-size:10px; color:var(--muted); margin-top:6px; border-top:1px dashed var(--border);
+    padding-top:6px; word-break:break-all; }
+  .pbar { height:7px; background:var(--bg); border-radius:5px; overflow:hidden; }
+  .pbar i { display:block; height:100%; background:var(--accent); border-radius:5px; transition:width .4s; }
+  .ncard .ns { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:5px; }
+
+  /* 메인 */
+  .main { flex:1; overflow:auto; padding:26px 22px; min-width:0; }
+  .container { max-width:1500px; margin:0 auto; display:flex; flex-direction:column; gap:18px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:14px;
+          box-shadow:var(--shadow); padding:20px 22px; }
+
+  /* 스텝퍼 */
+  .steps { display:flex; align-items:center; gap:0; margin-bottom:18px; }
+  .step { display:flex; align-items:center; gap:8px; }
+  .step .num { width:26px; height:26px; border-radius:50%; background:var(--bg); color:var(--muted);
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800;
+    border:2px solid var(--border); }
+  .step.active .num { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .step.done .num { background:var(--ok); color:#fff; border-color:var(--ok); }
+  .step .lbl { font-size:13px; font-weight:600; color:var(--muted); }
+  .step.active .lbl, .step.done .lbl { color:var(--text); }
+  .steps .line { flex:1; height:2px; background:var(--border); margin:0 10px; min-width:24px; }
+  .steps .line.done { background:var(--ok); }
+
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .row > input[type=text]#repo { flex:1; min-width:220px; }
+  .hint { font-size:12px; color:var(--muted); }
+  /* 토큰 입력 */
+  .tokenbox { display:inline-flex; align-items:center; gap:6px; background:#fff;
+    border:1px solid var(--border); border-radius:9px; padding:0 10px; width:230px; transition:border-color .15s,box-shadow .15s; }
+  .tokenbox:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-bg); }
+  .tokenbox.need { border-color:var(--medium); box-shadow:0 0 0 3px var(--medium-bg); }
+  .tokenbox .ic { font-size:13px; opacity:.6; }
+  .tokenbox input { border:0; outline:0; background:transparent; padding:9px 0; width:100%; font-size:13px; }
+  .token-hint { display:flex; align-items:center; gap:8px; margin-top:12px; padding:10px 14px;
+    background:var(--medium-bg); border:1px solid #ffd8a8; border-radius:10px; font-size:13px; color:var(--medium); }
+  .token-hint a { color:var(--accent); font-weight:600; text-decoration:none; margin-left:auto; white-space:nowrap; }
+  .prog { margin-top:14px; }
+  .prog .ptext { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-bottom:5px; }
+  .prog .pbar { height:10px; }
+  .prog .pbar i.indet { width:35%; animation:slide 1.2s ease-in-out infinite alternate; }
+  @keyframes slide { from{margin-left:0} to{margin-left:65%} }
+
+  /* 결과 대시보드 */
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; }
+  .tile { border:1px solid var(--border); border-radius:12px; padding:14px 16px; background:#fff; }
+  .tile .v { font-size:26px; font-weight:800; letter-spacing:-.5px; }
+  .tile .k { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  .tile.high .v { color:var(--high); } .tile.medium .v { color:var(--medium); } .tile.low .v { color:var(--low); }
+  .tile.new .v { color:var(--accent); } .tile.resolved .v { color:var(--ok); }
+  .fcard.isnew { box-shadow:0 0 0 2px var(--accent-bg); }
+  .newtag { font-size:9px; font-weight:800; color:#fff; background:var(--accent); border-radius:10px;
+    padding:2px 7px; margin-left:6px; vertical-align:middle; }
+
+  .sev-section { margin-top:16px; }
+  .sev-section .sh { display:flex; align-items:center; gap:8px; font-weight:800; font-size:13px;
+    padding:8px 12px; border-radius:9px; }
+  .sev-section.high .sh { background:var(--high-bg); color:var(--high); }
+  .sev-section.medium .sh { background:var(--medium-bg); color:var(--medium); }
+  .sev-section.low .sh { background:var(--low-bg); color:var(--low); }
+  .sev-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; margin-top:10px; }
+  .fcard { border:1px solid var(--border); border-left-width:4px; border-radius:10px;
+           padding:11px 13px; background:#fff; cursor:pointer; transition:box-shadow .12s,transform .12s; }
+  .fcard:hover { box-shadow:0 3px 12px rgba(31,35,40,.13); transform:translateY(-1px); }
+  .fcard.high { border-left-color:var(--high); }
+  .fcard.medium { border-left-color:var(--medium); }
+  .fcard.low { border-left-color:var(--low); }
+  .fcard .cat { font-size:10px; font-weight:700; color:var(--muted); background:var(--bg);
+    border-radius:12px; padding:2px 9px; display:inline-block; margin-bottom:6px; }
+  .fcard .t { font-weight:700; font-size:13px; line-height:1.4;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .fcard .loc { font-family:ui-monospace,monospace; font-size:11px; color:var(--accent); margin-top:7px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .empty { color:var(--muted); text-align:center; padding:22px; }
+  .status { font-size:12px; color:var(--muted); }
+  .warn { color:var(--high); font-size:12px; }
+
+  /* 채팅 드로어 */
+  .drawer { width:400px; flex:0 0 auto; background:var(--card); border-left:1px solid var(--border);
+            display:flex; flex-direction:column; position:relative; }
+  .drawer.hidden { display:none; }
+  .resizer { position:absolute; left:-3px; top:0; width:6px; height:100%; cursor:col-resize; z-index:5; }
+  .resizer:hover { background:var(--accent-bg); }
+  .dhead { padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; font-weight:700; }
+  .dhead .x { margin-left:auto; background:none; border:0; color:var(--muted); font-size:18px; padding:2px 8px; }
+  #log { flex:1; overflow:auto; padding:16px; }
+  .msg { margin-bottom:14px; }
+  .msg .who { font-size:11px; color:var(--muted); margin-bottom:4px; }
+  .bubble { white-space:pre-wrap; word-break:break-word; border:1px solid var(--border);
+            border-radius:10px; padding:10px 12px; background:#fff; }
+  .msg.user .bubble { background:var(--accent-bg); border-color:#c3ddff; }
+  .srcitem { font-size:11px; color:var(--muted); font-family:ui-monospace,monospace;
+             border:1px solid var(--border); border-radius:6px; padding:4px 8px; margin-top:4px; }
+  .srcitem b { color:var(--text); }
+  #ask { display:flex; gap:8px; padding:12px; border-top:1px solid var(--border); }
+  #q { flex:1; }
+
+  /* 모달 */
+  .modal-bg { position:fixed; inset:0; background:rgba(31,35,40,.45); display:none;
+              align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .modal-bg.show { display:flex; }
+  .modal { background:#fff; border-radius:16px; max-width:620px; width:100%; max-height:85vh;
+           overflow:auto; box-shadow:0 12px 40px rgba(0,0,0,.25); border-top:5px solid var(--border); }
+  .modal.high { border-top-color:var(--high); } .modal.medium { border-top-color:var(--medium); } .modal.low { border-top-color:var(--low); }
+  .mhead { padding:20px 22px 0; display:flex; gap:8px; align-items:center; }
+  .mhead .x { margin-left:auto; background:none; border:0; font-size:22px; color:var(--muted); cursor:pointer; }
+  .mbody { padding:12px 22px 24px; }
+  .modal h3 { margin:8px 0 4px; font-size:18px; }
+  .mloc { font-family:ui-monospace,monospace; color:var(--accent); font-size:13px; margin-bottom:16px; }
+  .sec-label { font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-top:14px; }
+  .sec-label .copy { float:right; font-size:11px; padding:3px 10px; background:var(--accent); color:#fff; border-radius:6px; }
+  .fix { background:var(--accent-bg); border-radius:10px; padding:12px 14px; margin-top:6px; }
+  .prompt { background:#0d1117; color:#e6edf3; border-radius:10px; padding:14px; margin-top:6px;
+            font-family:ui-monospace,monospace; font-size:12px; line-height:1.6; white-space:pre-wrap;
+            word-break:break-word; max-height:240px; overflow:auto; }
+  .sev { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.5px;
+         padding:2px 9px; border-radius:20px; color:#fff; display:inline-block; }
+  .sev.high { background:var(--high); } .sev.medium { background:var(--medium); } .sev.low { background:var(--low); }
+
+  @media(max-width:900px){ .sidebar{display:none} }
+  @media(max-width:720px){ .drawer{ position:fixed; right:0; top:57px; height:calc(100vh - 57px); width:88%!important; box-shadow:-4px 0 20px rgba(0,0,0,.12);} }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Repo <span>QA</span> Agent</div>
+  <span class="sp"></span>
+  <span id="repoState" class="status">레포 없음</span>
+  <button class="btn-ghost" id="loginBtn" onclick="login()">🔓 GitHub 로그인</button>
+  <button class="btn-ghost" onclick="toggleChat()">💬 대화</button>
+</header>
+
+<div class="modal-bg" id="authBg" onclick="if(event.target===this)closeAuth()">
+  <div class="modal" style="max-width:440px;text-align:center">
+    <div class="mhead"><span style="font-weight:800">🔑 GitHub 로그인</span>
+      <button class="x" onclick="closeAuth()">×</button></div>
+    <div class="mbody">
+      <p style="color:var(--muted);margin:0 0 12px">아래 코드를 GitHub에 입력하면 로그인됩니다.</p>
+      <div id="userCode" style="font:800 30px ui-monospace,monospace;letter-spacing:4px;
+        background:var(--bg);border-radius:12px;padding:16px;margin-bottom:14px">····-····</div>
+      <a id="verifyLink" href="#" target="_blank" class="btn-primary"
+        style="display:inline-block;text-decoration:none;padding:11px 22px">GitHub에서 코드 입력하기 →</a>
+      <p id="authStatus" class="status" style="margin-top:16px">코드 발급 중…</p>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <aside class="sidebar">
+    <h3>GPU 노드 현황</h3>
+    <div id="nodes"><div class="empty">로딩…</div></div>
+  </aside>
+
+  <div class="main">
+    <div class="container">
+
+      <div class="card">
+        <div class="steps" id="steps">
+          <div class="step" data-s="1"><div class="num">1</div><div class="lbl">레포 선택</div></div>
+          <div class="line"></div>
+          <div class="step" data-s="2"><div class="num">2</div><div class="lbl">인덱싱</div></div>
+          <div class="line"></div>
+          <div class="step" data-s="3"><div class="num">3</div><div class="lbl">QA 분석</div></div>
+          <div class="line"></div>
+          <div class="step" data-s="4"><div class="num">4</div><div class="lbl">결과</div></div>
+        </div>
+        <div class="row">
+          <select id="existing" onchange="pickRepo()">
+            <option value="">— 인덱싱된 레포 선택 —</option>
+          </select>
+          <button class="btn-ghost" id="delBtn" onclick="delRepo()" title="선택 레포 삭제" style="padding:9px 12px">🗑</button>
+          <input id="repo" type="text" placeholder="GitHub URL (https://github.com/org/repo)">
+          <label class="tokenbox" id="tokenbox" title="private 레포일 때만 필요">
+            <span class="ic">🔑</span>
+            <input id="ghtoken" type="password" placeholder="GitHub 토큰 (private용)" autocomplete="off">
+          </label>
+          <button class="btn-primary" id="ingestBtn" onclick="ingest()">가져오기 · 인덱싱</button>
+          <button class="btn-ghost" id="qaBtn" onclick="runQA()" disabled>QA 분석 실행</button>
+        </div>
+        <div class="token-hint" id="tokenHint" style="display:none">
+          🔒 <span>private 레포로 보입니다. GitHub 토큰을 입력하고 다시 시도하세요.</span>
+          <a href="https://github.com/settings/tokens?type=beta" target="_blank">토큰 만들기 →</a>
+        </div>
+        <div class="prog" id="prog" style="display:none">
+          <div class="ptext"><span id="progLabel"></span><span id="progPct"></span></div>
+          <div class="pbar"><i id="progFill"></i></div>
+        </div>
+        <div class="hint" style="margin-top:10px">
+          기존 인덱스를 고르면 바로 3단계로. 새 레포는 GitHub URL로 가져오기 — 코드는 분석 후 즉시 삭제되고 검색 인덱스만 남습니다.
+          private 레포는 본인 <b>fine-grained 토큰</b>(해당 레포 Contents:Read)을 입력하세요. 토큰은 저장되지 않습니다.
+        </div>
+      </div>
+
+      <div class="card" id="resultCard" style="display:none">
+        <div class="tiles" id="tiles"></div>
+        <div id="qa"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <aside class="drawer hidden" id="drawer">
+    <div class="resizer" id="resizer"></div>
+    <div class="dhead">💬 코드 대화 <button class="x" onclick="toggleChat()">×</button></div>
+    <div id="log"><div class="empty">코드에 대해 질문해 보세요.</div></div>
+    <div id="ask">
+      <input id="q" type="text" placeholder="코드에 대해 질문…" onkeydown="if(event.key==='Enter')send()" disabled>
+      <button class="btn-primary" id="sendBtn" onclick="send()" disabled>전송</button>
+    </div>
+  </aside>
+</div>
+
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal">
+    <div class="mhead">
+      <span class="sev" id="mSev"></span><span id="mCat" style="font-size:12px;color:var(--muted)"></span>
+      <button class="x" onclick="closeModal()">×</button>
+    </div>
+    <div class="mbody">
+      <h3 id="mTitle"></h3>
+      <div class="mloc" id="mLoc"></div>
+      <div class="sec-label">설명</div>
+      <div id="mDetail"></div>
+      <div class="sec-label">권장 조치</div>
+      <div class="fix" id="mFix"></div>
+      <div class="sec-label">수정 프롬프트 <button class="copy" onclick="copyPrompt()" id="copyBtn">복사</button></div>
+      <pre class="prompt" id="mPrompt"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+let REPO = "";
+let qaTimer = null, ingTimer = null, FINDINGS = [];
+let SESSION = localStorage.getItem('rqa_session') || "";
+let authTimer = null;
+
+/* ── GitHub 로그인 (Device Flow) ── */
+async function refreshAuth(){
+  const btn = document.getElementById('loginBtn');
+  if(!SESSION){ btn.textContent = '🔓 GitHub 로그인'; btn.onclick = login; setLoggedIn(false); return; }
+  try{
+    const j = await (await fetch('/auth/me?session='+encodeURIComponent(SESSION))).json();
+    if(j.login){ btn.textContent = '👤 '+j.login+' · 로그아웃'; btn.onclick = logout; setLoggedIn(true); }
+    else { SESSION=""; localStorage.removeItem('rqa_session'); btn.textContent='🔓 GitHub 로그인'; btn.onclick=login; setLoggedIn(false); }
+  }catch(e){}
+}
+
+function setLoggedIn(on){
+  // 로그인하면 토큰칸 숨김(불필요)
+  document.getElementById('tokenbox').style.display = on ? 'none' : '';
+  loadRepos();  // 로그인 상태 따라 목록 갱신(내 레포만)
+}
+
+async function login(){
+  document.getElementById('authBg').classList.add('show');
+  document.getElementById('authStatus').textContent = '코드 발급 중…';
+  document.getElementById('userCode').textContent = '····-····';
+  const j = await (await fetch('/auth/device/start',{method:'POST'})).json();
+  document.getElementById('userCode').textContent = j.user_code || '오류';
+  const link = document.getElementById('verifyLink');
+  link.href = j.verification_uri || 'https://github.com/login/device';
+  document.getElementById('authStatus').textContent = 'GitHub에서 승인 대기 중…';
+  pollAuth(j.device_code, (j.interval||5)*1000, Date.now()+(j.expires_in||900)*1000);
+}
+
+async function pollAuth(deviceCode, interval, deadline){
+  if(authTimer) clearTimeout(authTimer);
+  if(Date.now() > deadline){ document.getElementById('authStatus').textContent='만료됨. 다시 시도하세요.'; return; }
+  const j = await (await fetch('/auth/device/poll',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({device_code:deviceCode})})).json();
+  if(j.status==='ok'){
+    SESSION = j.session; localStorage.setItem('rqa_session', SESSION);
+    document.getElementById('authStatus').textContent = '✅ '+j.login+' 로그인 완료';
+    refreshAuth(); hideTokenHint();
+    setTimeout(closeAuth, 1200);
+  }else if(j.status==='slow_down'){
+    authTimer = setTimeout(()=>pollAuth(deviceCode, interval+5000, deadline), interval+5000);
+  }else if(j.status==='authorization_pending' || j.status==='pending'){
+    authTimer = setTimeout(()=>pollAuth(deviceCode, interval, deadline), interval);
+  }else{
+    document.getElementById('authStatus').textContent = '실패: '+j.status;
+  }
+}
+
+async function logout(){
+  await fetch('/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({session:SESSION})});
+  SESSION=""; localStorage.removeItem('rqa_session'); refreshAuth();
+}
+function closeAuth(){ document.getElementById('authBg').classList.remove('show'); if(authTimer) clearTimeout(authTimer); }
+
+function esc(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+/* ── 스텝퍼 ── */
+function setStep(n, running){
+  document.querySelectorAll('#steps .step').forEach(el=>{
+    const s = +el.dataset.s;
+    el.className = 'step' + (s<n?' done':(s===n?' active':''));
+  });
+  document.querySelectorAll('#steps .line').forEach((el,i)=>{
+    el.className = 'line' + (i+1<n?' done':'');
+  });
+}
+
+/* ── 진행바 ── */
+function showProg(label, pct){ // pct null=indeterminate
+  const p = document.getElementById('prog');
+  p.style.display = '';
+  document.getElementById('progLabel').textContent = label;
+  const fill = document.getElementById('progFill');
+  if(pct==null){ fill.className='indet'; fill.style.width='35%'; document.getElementById('progPct').textContent=''; }
+  else { fill.className=''; fill.style.width=pct+'%'; document.getElementById('progPct').textContent=Math.round(pct)+'%'; }
+}
+function hideProg(){ document.getElementById('prog').style.display='none'; }
+
+/* ── 노드 사이드바 ── */
+async function loadNodes(){
+  try{
+    const j = await (await fetch('/api/nodes')).json();
+    document.getElementById('nodes').innerHTML = (j.nodes||[]).map(n=>`
+      <div class="ncard">
+        <div class="nh"><span class="dot ${n.health?'':'bad'}"></span>${esc(n.name)}</div>
+        <div class="nm">${esc(n.model)}</div>
+        <div class="pbar"><i style="width:${n.share||0}%"></i></div>
+        <div class="ns"><span>처리 ${n.share||0}% (${n.total||0}건)</span>
+          <span>${n.ema_ms?Math.round(n.ema_ms/100)/10+'s':'—'}${n.inflight?' · 작업중':''}</span></div>
+        ${n.fails?`<div class="ns warn">실패 ${n.fails}</div>`:''}
+        ${n.backend?`<div class="backend">↳ ${esc(n.backend)}</div>`:''}
+      </div>`).join('');
+  }catch(e){}
+}
+
+/* ── 레포 ── */
+function enableQA(label){          // 인덱싱 완료 → QA 버튼만 활성
+  document.getElementById('qaBtn').disabled = false;
+  if(label) document.getElementById('repoState').textContent = label;
+}
+function enableChatInputs(){       // 대화 입력 활성 (QA 완료 or 기존 인덱스)
+  document.getElementById('q').disabled = false;
+  document.getElementById('sendBtn').disabled = false;
+}
+function showTokenHint(){
+  document.getElementById('tokenHint').style.display = 'flex';
+  document.getElementById('tokenbox').classList.add('need');
+  document.getElementById('ghtoken').focus();
+}
+function hideTokenHint(){
+  document.getElementById('tokenHint').style.display = 'none';
+  document.getElementById('tokenbox').classList.remove('need');
+}
+
+async function loadRepos(){
+  try{
+    const j = await (await fetch('/api/repos?session='+encodeURIComponent(SESSION))).json();
+    const sel = document.getElementById('existing');
+    sel.innerHTML = '<option value="">— 인덱싱된 레포 선택 —</option>';  // 초기화(중복 방지)
+    (j.repos||[]).forEach(r=>{
+      const o = document.createElement('option');
+      o.value = r.repo_id; o.textContent = `${r.repo_id} (${r.chunks}청크)`;
+      sel.appendChild(o);
+    });
+  }catch(e){}
+}
+
+function pickRepo(){
+  const v = document.getElementById('existing').value;
+  if(!v) return;
+  REPO = v;
+  enableQA(`${v} · 기존 인덱스`);
+  enableChatInputs();          // 기존 인덱스는 대화도 바로 가능
+  hideTokenHint();
+  setStep(3);
+  pollQA();
+}
+
+/* ── 인덱싱 (백그라운드+폴링) ── */
+async function ingest(){
+  const src = document.getElementById('repo').value.trim();
+  if(!src) return;
+  setStep(2);
+  document.getElementById('ingestBtn').disabled = true;
+  const r = await fetch('/api/ingest',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({source:src, token:document.getElementById('ghtoken').value.trim(), session:SESSION})});
+  const j = await r.json();
+  if(!r.ok){
+    document.getElementById('ingestBtn').disabled = false;
+    document.getElementById('repoState').textContent = '에러: '+(j.detail||'');
+    setStep(1); return;
+  }
+  REPO = j.repo_id || '';
+  pollIngest();
+}
+
+async function delRepo(){
+  const v = document.getElementById('existing').value;
+  if(!v || !confirm(`'${v}' 인덱스·QA결과를 모두 삭제할까요?`)) return;
+  await fetch('/api/repos/'+encodeURIComponent(v)+'?session='+encodeURIComponent(SESSION), {method:'DELETE'});
+  location.reload();
+}
+
+async function pollIngest(){
+  if(ingTimer) clearTimeout(ingTimer);
+  try{
+    const j = await (await fetch('/api/ingest/'+encodeURIComponent(REPO)+'?session='+encodeURIComponent(SESSION))).json();
+    if(j.status==='running'){
+      const pct = j.total? (j.done/j.total*100) : null;
+      showProg(`인덱싱: ${j.phase||''} ${j.total?`(${j.done}/${j.total})`:''} · ${j.elapsed_sec||0}초`, pct);
+      ingTimer = setTimeout(pollIngest, 1500);
+    }else if(j.status==='done'){
+      hideProg(); hideTokenHint();
+      document.getElementById('ingestBtn').disabled = false;
+      const inc = j.incremental ? ` · 변경 ${j.changed_files}파일` : '';
+      enableQA(`${REPO} · ${j.indexed}청크${inc} · QA 분석을 실행하세요`);
+      setStep(3);
+      loadRepos();
+    }else if(j.status==='error'){
+      hideProg();
+      document.getElementById('ingestBtn').disabled = false;
+      if((j.error||'').includes('NEED_TOKEN')){
+        showTokenHint();
+        document.getElementById('repoState').textContent = 'private 레포 — 토큰 필요';
+      }else{
+        document.getElementById('repoState').textContent = '인덱싱 에러: '+(j.error||'');
+      }
+      setStep(1);
+    }
+  }catch(e){ ingTimer = setTimeout(pollIngest, 3000); }
+}
+
+/* ── QA (백그라운드+폴링) ── */
+async function runQA(){
+  if(!REPO) return;
+  setStep(3);
+  await fetch('/api/qa',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({repo_id:REPO, session:SESSION})});
+  pollQA();
+}
+
+async function pollQA(){
+  if(qaTimer) clearTimeout(qaTimer);
+  const btn = document.getElementById('qaBtn');
+  try{
+    const j = await (await fetch('/api/qa/'+encodeURIComponent(REPO)+'?session='+encodeURIComponent(SESSION))).json();
+    if(j.status==='running'){
+      btn.disabled = true;
+      const pct = j.total? (j.done/j.total*100) : null;
+      showProg(`QA 분석 중 (2노드 분산) ${j.total?`${j.done}/${j.total} 배치`:''} · ${j.elapsed_sec||0}초`, pct);
+      loadNodes();
+      qaTimer = setTimeout(pollQA, 3000);
+    }else if(j.status==='done'){
+      btn.disabled = false; hideProg();
+      setStep(4); renderResults(j); loadNodes(); enableChatInputs();
+    }else if(j.status==='error'){
+      btn.disabled = false; hideProg();
+      document.getElementById('resultCard').style.display='';
+      document.getElementById('qa').innerHTML = '<div class="warn">에러: '+esc(j.error||'')+'</div>';
+    }else{
+      btn.disabled = !REPO; hideProg();
+    }
+  }catch(e){}
+}
+
+/* ── 결과 대시보드 ── */
+function renderResults(j){
+  const fs = FINDINGS = j.findings||[];
+  document.getElementById('resultCard').style.display='';
+  const cnt = {high:0,medium:0,low:0};
+  fs.forEach(f=>{ cnt[(f.severity||'low').toLowerCase()]=(cnt[(f.severity||'low').toLowerCase()]||0)+1; });
+  const diffTiles = j.compared
+    ? `<div class="tile new"><div class="v">${j.new_count||0}</div><div class="k">🆕 신규</div></div>
+       <div class="tile resolved"><div class="v">${j.resolved_count||0}</div><div class="k">✅ 해결됨</div></div>`
+    : '';
+  document.getElementById('tiles').innerHTML = `
+    <div class="tile high"><div class="v">${cnt.high||0}</div><div class="k">High 위험</div></div>
+    <div class="tile medium"><div class="v">${cnt.medium||0}</div><div class="k">Medium</div></div>
+    <div class="tile low"><div class="v">${cnt.low||0}</div><div class="k">Low</div></div>
+    <div class="tile"><div class="v">${fs.length}</div><div class="k">총 발견</div></div>
+    ${diffTiles}
+    <div class="tile"><div class="v">${Math.round(j.elapsed_sec||0)}s</div><div class="k">분석 시간${j.incremental?' (증분)':''}</div></div>`;
+  const el = document.getElementById('qa');
+  if(!fs.length){ el.innerHTML = '<div class="empty">🎉 발견사항 없음</div>'; return; }
+  const bySev = {high:[],medium:[],low:[]};
+  fs.forEach((f,i)=>{ bySev[(f.severity||'low').toLowerCase()]?.push([f,i]); });
+  const icon = {high:'🔴',medium:'🟠',low:'⚪'};
+  const label = {high:'High — 즉시 조치 필요', medium:'Medium — 개선 권장', low:'Low — 참고'};
+  el.innerHTML = ['high','medium','low'].filter(s=>bySev[s].length).map(s=>`
+    <div class="sev-section ${s}">
+      <div class="sh">${icon[s]} ${label[s]} <span style="margin-left:auto">${bySev[s].length}건</span></div>
+      <div class="sev-grid">
+      ${bySev[s].map(([f,i])=>`
+        <div class="fcard ${s}${f.status==='new'?' isnew':''}" onclick="openFinding(${i})">
+          <span class="cat">${esc(f.category||'')}</span>${f.status==='new'?'<span class="newtag">신규</span>':''}
+          <div class="t">${esc(f.title||'')}</div>
+          <div class="loc">${esc(f.file||'')}:${esc(f.line||'')}</div>
+        </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+/* ── 모달 ── */
+function openFinding(i){
+  const f = FINDINGS[i]; if(!f) return;
+  const sev = (f.severity||'low').toLowerCase();
+  document.getElementById('modal').className = 'modal '+sev;
+  const S = document.getElementById('mSev'); S.className='sev '+sev; S.textContent=sev;
+  document.getElementById('mCat').textContent = f.category||'';
+  document.getElementById('mTitle').textContent = f.title||'';
+  document.getElementById('mLoc').textContent = (f.file||'')+':'+(f.line||'');
+  document.getElementById('mDetail').textContent = f.detail||'—';
+  document.getElementById('mFix').textContent = f.suggestion||'—';
+  document.getElementById('mPrompt').textContent = buildPrompt(f);
+  document.getElementById('copyBtn').textContent = '복사';
+  document.getElementById('modalBg').classList.add('show');
+}
+function buildPrompt(f){
+  const loc = (f.file||'')+':'+(f.line||'');
+  return `${loc} 의 다음 문제를 수정해줘.\n\n`
+    + `[유형] ${f.category||''} / 위험도 ${f.severity||''}\n`
+    + `[문제] ${f.title||''}\n[설명] ${f.detail||''}\n[권장] ${f.suggestion||''}\n\n`
+    + `요구사항:\n- 기존 동작을 유지하면서 최소 변경으로 고칠 것\n`
+    + `- 왜 바꿨는지 한 줄 주석으로 남길 것\n- 같은 원인이 다른 곳에도 있으면 함께 지적할 것`;
+}
+async function copyPrompt(){
+  const txt = document.getElementById('mPrompt').textContent;
+  const btn = document.getElementById('copyBtn');
+  let ok = false;
+  try{
+    if(navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(txt); ok = true;
+    }
+  }catch(e){}
+  if(!ok){  // http(비보안)·구브라우저 폴백
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    }catch(e){}
+  }
+  btn.textContent = ok ? '복사됨 ✓' : '수동 복사(선택됨)';
+  if(!ok){  // 그래도 안되면 텍스트 선택시켜서 사용자가 Ctrl+C
+    const r = document.createRange(); r.selectNodeContents(document.getElementById('mPrompt'));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
+}
+function closeModal(){ document.getElementById('modalBg').classList.remove('show'); }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+
+/* ── 채팅 ── */
+function toggleChat(){ document.getElementById('drawer').classList.toggle('hidden'); }
+(function(){
+  const rz = document.getElementById('resizer'), d = document.getElementById('drawer');
+  let dragging = false;
+  rz.addEventListener('mousedown', e=>{ dragging=true; document.body.style.userSelect='none'; e.preventDefault(); });
+  window.addEventListener('mousemove', e=>{
+    if(!dragging) return;
+    d.style.width = Math.min(760, Math.max(300, window.innerWidth - e.clientX)) + 'px';
+  });
+  window.addEventListener('mouseup', ()=>{ dragging=false; document.body.style.userSelect=''; });
+})();
+
+function add(who, cls, html){
+  const log = document.getElementById('log');
+  if(log.querySelector('.empty')) log.innerHTML='';
+  const d = document.createElement('div');
+  d.className = 'msg '+cls;
+  d.innerHTML = `<div class="who">${who}</div><div class="bubble">${html}</div>`;
+  log.appendChild(d); log.scrollTop = log.scrollHeight;
+  return d;
+}
+
+async function send(){
+  const q = document.getElementById('q');
+  const text = q.value.trim();
+  if(!text || !REPO) return;
+  q.value=''; add('나','user', esc(text));
+  document.getElementById('sendBtn').disabled = true;
+  const think = add('에이전트','', '<span class="status">생각 중… (gemma4:31b)</span>');
+  try{
+    const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question:text, repo_id:REPO, session:SESSION})});
+    const j = await r.json();
+    let html = esc(j.answer||'(빈 응답)');
+    if(j.sources && j.sources.length)
+      html += '<div>'+j.sources.slice(0,5).map(s=>
+        `<div class="srcitem"><b>${esc(s.file)}</b>:${esc(s.lines)} ${esc(s.symbol||'')}</div>`).join('')+'</div>';
+    if(j.bad_citations && j.bad_citations.length)
+      html += `<div class="warn">⚠ 확인 안 된 인용: ${j.bad_citations.map(esc).join(', ')}</div>`;
+    think.querySelector('.bubble').innerHTML = html;
+  }catch(e){
+    think.querySelector('.bubble').innerHTML = '<span class="warn">에러: '+esc(e.message)+'</span>';
+  }finally{ document.getElementById('sendBtn').disabled = false; q.focus(); }
+}
+
+setStep(1);
+refreshAuth();
+loadRepos();
+loadNodes();
+setInterval(loadNodes, 15000);  // 사이드바 노드 15초마다 갱신
+</script>
+</body>
+</html>
