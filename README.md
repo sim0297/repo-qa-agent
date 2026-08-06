@@ -12,6 +12,8 @@
 
 ## 구조
 
+![아키텍처](docs/img/architecture.png)
+
 ```
 GitHub tarball ─→ tree-sitter 청킹 ─→ bge-m3 임베딩 ─→ ChromaDB
                                                           │
@@ -53,6 +55,10 @@ cd backend && ../.venv/bin/uvicorn app:app --host 0.0.0.0 --port <PORT>
 3. **QA 분석 실행** — 심각도별 발견사항, 카드 클릭 시 상세 + 수정 프롬프트 복사
 4. **대화** — 우측 드로어에서 코드 질문
 
+발견사항 클릭 → 상세 + 코딩 에이전트용 수정 프롬프트:
+
+![발견사항 상세](docs/img/solution.png)
+
 ## 설정 (.env)
 
 | 키 | 설명 |
@@ -69,10 +75,3 @@ cd backend && ../.venv/bin/uvicorn app:app --host 0.0.0.0 --port <PORT>
 - 코드·시크릿 커밋 안 됨 — 소스엔 하드코딩 0, 전부 `.env`.
 - 사용자별 레포 격리 — 남의 인덱스는 목록에도 안 뜨고 직접 API 호출도 404.
 - private 레포 토큰은 서버 메모리에만, 클라이언트는 불투명 세션 ID만 보관.
-
-## 로드맵
-
-[roadmap.md](roadmap.md) 참조 — Phase 0~7 완료(인덱싱·QA·Q&A·UI·증분·멀티노드·로그인/격리), 3.5(멀티에이전트)·평가·콜그래프 등 예정.
-
----
-🤖 개발 도구: [Claude Code](https://claude.com/claude-code)
