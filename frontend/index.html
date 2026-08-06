@@ -269,17 +269,16 @@
 <script>
 let REPO = "";
 let qaTimer = null, ingTimer = null, FINDINGS = [];
-let SESSION = localStorage.getItem('rqa_session') || "";
 let authTimer = null;
+// 세션 ID는 서버의 HttpOnly 쿠키에만 저장됨(JS 접근 불가). 여기선 로그인 여부만 앎.
 
 /* ── GitHub 로그인 (Device Flow) ── */
 async function refreshAuth(){
   const btn = document.getElementById('loginBtn');
-  if(!SESSION){ btn.textContent = '🔓 GitHub 로그인'; btn.onclick = login; setLoggedIn(false); return; }
   try{
-    const j = await (await fetch('/auth/me?session='+encodeURIComponent(SESSION))).json();
+    const j = await (await fetch('/auth/me')).json();   // 쿠키 자동 전송
     if(j.login){ btn.textContent = '👤 '+j.login+' · 로그아웃'; btn.onclick = logout; setLoggedIn(true); }
-    else { SESSION=""; localStorage.removeItem('rqa_session'); btn.textContent='🔓 GitHub 로그인'; btn.onclick=login; setLoggedIn(false); }
+    else { btn.textContent='🔓 GitHub 로그인'; btn.onclick=login; setLoggedIn(false); }
   }catch(e){}
 }
 
@@ -305,8 +304,7 @@ async function pollAuth(deviceCode, interval, deadline){
   const j = await (await fetch('/auth/device/poll',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({device_code:deviceCode})})).json();
   if(j.status==='ok'){
-    SESSION = j.session; localStorage.setItem('rqa_session', SESSION);
-    document.getElementById('authStatus').textContent = '✅ '+j.login+' 로그인 완료';
+    document.getElementById('authStatus').textContent = '✅ '+j.login+' 로그인 완료';  // 세션은 서버가 HttpOnly 쿠키로 설정
     refreshAuth(); hideTokenHint();
     setTimeout(closeAuth, 1200);
   }else if(j.status==='slow_down'){
@@ -319,9 +317,8 @@ async function pollAuth(deviceCode, interval, deadline){
 }
 
 async function logout(){
-  await fetch('/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({session:SESSION})});
-  SESSION=""; localStorage.removeItem('rqa_session'); refreshAuth();
+  await fetch('/auth/logout',{method:'POST'});   // 쿠키 자동 전송, 서버가 쿠키 삭제
+  refreshAuth();
 }
 function closeAuth(){ document.getElementById('authBg').classList.remove('show'); if(authTimer) clearTimeout(authTimer); }
 
@@ -380,7 +377,7 @@ function hideTokenHint(){ document.getElementById('tokenHint').style.display = '
 
 async function loadRepos(){
   try{
-    const j = await (await fetch('/api/repos?session='+encodeURIComponent(SESSION))).json();
+    const j = await (await fetch('/api/repos')).json();
     const sel = document.getElementById('existing');
     sel.innerHTML = '<option value="">— 인덱싱된 레포 선택 —</option>';  // 초기화(중복 방지)
     (j.repos||[]).forEach(r=>{
@@ -409,7 +406,7 @@ async function ingest(){
   setStep(2);
   document.getElementById('ingestBtn').disabled = true;
   const r = await fetch('/api/ingest',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({source:src, session:SESSION})});
+    body:JSON.stringify({source:src})});
   const j = await r.json();
   if(!r.ok){
     document.getElementById('ingestBtn').disabled = false;
@@ -423,14 +420,14 @@ async function ingest(){
 async function delRepo(){
   const v = document.getElementById('existing').value;
   if(!v || !confirm(`'${v}' 인덱스·QA결과를 모두 삭제할까요?`)) return;
-  await fetch('/api/repos/'+encodeURIComponent(v)+'?session='+encodeURIComponent(SESSION), {method:'DELETE'});
+  await fetch('/api/repos/'+encodeURIComponent(v), {method:'DELETE'});
   location.reload();
 }
 
 async function pollIngest(){
   if(ingTimer) clearTimeout(ingTimer);
   try{
-    const j = await (await fetch('/api/ingest/'+encodeURIComponent(REPO)+'?session='+encodeURIComponent(SESSION))).json();
+    const j = await (await fetch('/api/ingest/'+encodeURIComponent(REPO))).json();
     if(j.status==='running'){
       const pct = j.total? (j.done/j.total*100) : null;
       showProg(`인덱싱: ${j.phase||''} ${j.total?`(${j.done}/${j.total})`:''} · ${j.elapsed_sec||0}초`, pct);
@@ -461,7 +458,7 @@ async function runQA(){
   if(!REPO) return;
   setStep(3);
   await fetch('/api/qa',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({repo_id:REPO, session:SESSION})});
+    body:JSON.stringify({repo_id:REPO})});
   pollQA();
 }
 
@@ -469,7 +466,7 @@ async function pollQA(){
   if(qaTimer) clearTimeout(qaTimer);
   const btn = document.getElementById('qaBtn');
   try{
-    const j = await (await fetch('/api/qa/'+encodeURIComponent(REPO)+'?session='+encodeURIComponent(SESSION))).json();
+    const j = await (await fetch('/api/qa/'+encodeURIComponent(REPO))).json();
     if(j.status==='running'){
       btn.disabled = true;
       const pct = j.total? (j.done/j.total*100) : null;
@@ -594,7 +591,11 @@ function add(who, cls, html){
   if(log.querySelector('.empty')) log.innerHTML='';
   const d = document.createElement('div');
   d.className = 'msg '+cls;
-  d.innerHTML = `<div class="who">${who}</div><div class="bubble">${html}</div>`;
+  // who는 textContent로 삽입(XSS 차단) — 라벨엔 마크업 불필요.
+  // bubble의 html은 호출부에서 esc() 처리된 신뢰 문자열만 전달(계약).
+  const w = document.createElement('div'); w.className = 'who'; w.textContent = who;
+  const b = document.createElement('div'); b.className = 'bubble'; b.innerHTML = html;
+  d.append(w, b);
   log.appendChild(d); log.scrollTop = log.scrollHeight;
   return d;
 }
@@ -608,7 +609,7 @@ async function send(){
   const think = add('에이전트','', '<span class="status">생각 중… (gemma4:31b)</span>');
   try{
     const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({question:text, repo_id:REPO, session:SESSION})});
+      body:JSON.stringify({question:text, repo_id:REPO})});
     const j = await r.json();
     let html = esc(j.answer||'(빈 응답)');
     if(j.sources && j.sources.length)

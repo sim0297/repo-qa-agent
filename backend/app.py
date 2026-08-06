@@ -17,12 +17,18 @@ from ingest import indexer
 from qa import analyzer
 from store import owners
 import auth
-from fastapi import HTTPException
+from fastapi import HTTPException, Request, Response
+
+COOKIE = "rqa_session"
 
 
-def _guard(repo_id: str, session: str):
-    """세션 사용자가 이 레포 접근 권한 있나. 없으면 404(존재 숨김)."""
-    if not owners.can_access(repo_id, auth.login_for(session)):
+def _sess(request: Request) -> str:
+    """세션 ID는 HttpOnly 쿠키에서만 읽음 (JS 접근 불가 → XSS로 탈취 불가)."""
+    return request.cookies.get(COOKIE, "")
+
+
+def _guard(repo_id: str, request: Request):
+    if not owners.can_access(repo_id, auth.login_for(_sess(request))):
         raise HTTPException(404, "레포를 찾을 수 없습니다")
 
 app = FastAPI(title="Repo QA Agent", version="0.1")
@@ -86,18 +92,18 @@ async def _fetch_backend(s: dict):
 
 
 @app.get("/api/repos")
-async def repos(session: str = ""):
+async def repos(request: Request):
     from store import vector
     # 등록된 레포 중 이 사용자가 소유(접근권)한 것만
-    login = auth.login_for(session)
+    login = auth.login_for(_sess(request))
     allowed = set(indexer.registry()) & owners.repos_of(login)
     return {"repos": [r for r in vector.list_repos() if r["repo_id"] in allowed]}
 
 
 @app.delete("/api/repos/{repo_id}")
-async def delete_repo(repo_id: str, session: str = ""):
+async def delete_repo(repo_id: str, request: Request):
     """레포 완전 삭제: 임베딩·QA결과·매니페스트·등록부."""
-    _guard(repo_id, session)
+    _guard(repo_id, request)
     owners.remove_repo(repo_id)
     import shutil
     from store import vector, manifest as mf
@@ -116,20 +122,19 @@ async def delete_repo(repo_id: str, session: str = ""):
 
 class IngestRequest(BaseModel):
     source: str          # git URL (GitHub)
-    token: str = ""      # 선택: 직접 붙여넣은 토큰
-    session: str = ""    # 선택: 로그인 세션 (있으면 그 토큰 사용)
 
 
 @app.post("/api/ingest")
-async def api_ingest(req: IngestRequest):
+async def api_ingest(req: IngestRequest, request: Request):
     if not indexer.parse_github(req.source):
         raise HTTPException(400, "GitHub URL만 지원합니다 (예: https://github.com/org/repo)")
-    login = auth.login_for(req.session)
+    session = _sess(request)
+    login = auth.login_for(session)
     rid = indexer.derive_id(req.source)
-    _guard(rid, req.session)                # 이미 남의 소유면 거부
+    _guard(rid, request)                    # 이미 남의 소유면 거부
     if login:
         owners.add(rid, login)              # 소유 도장
-    token = req.token or auth.token_for(req.session)
+    token = auth.token_for(session)         # 로그인 세션 토큰만 사용
     return indexer.start(req.source, token)
 
 
@@ -144,45 +149,47 @@ class PollReq(BaseModel):
 
 
 @app.post("/auth/device/poll")
-async def auth_poll(req: PollReq):
-    return await auth.device_poll(req.device_code)
+async def auth_poll(req: PollReq, response: Response):
+    r = await auth.device_poll(req.device_code)
+    if r.get("status") == "ok":
+        # 세션 ID를 HttpOnly 쿠키로만 내려줌 (JS 접근 불가). 클라이언트엔 미노출.
+        response.set_cookie(COOKIE, r["session"], httponly=True, samesite="lax",
+                            max_age=30 * 86400, path="/")
+        r.pop("session", None)
+    return r
 
 
 @app.get("/auth/me")
-async def auth_me(session: str = ""):
-    return {"login": auth.login_for(session)}
-
-
-class LogoutReq(BaseModel):
-    session: str = ""
+async def auth_me(request: Request):
+    return {"login": auth.login_for(_sess(request))}
 
 
 @app.post("/auth/logout")
-async def auth_logout(req: LogoutReq):
-    auth.logout(req.session)
+async def auth_logout(request: Request, response: Response):
+    auth.logout(_sess(request))
+    response.delete_cookie(COOKIE, path="/")
     return {"ok": True}
 
 
 @app.get("/api/ingest/{repo_id}")
-async def api_ingest_status(repo_id: str, session: str = ""):
-    _guard(repo_id, session)
+async def api_ingest_status(repo_id: str, request: Request):
+    _guard(repo_id, request)
     return indexer.status(repo_id)
 
 
 class QARequest(BaseModel):
     repo_id: str
-    session: str = ""
 
 
 @app.post("/api/qa")
-async def api_qa_start(req: QARequest):
-    _guard(req.repo_id, req.session)
+async def api_qa_start(req: QARequest, request: Request):
+    _guard(req.repo_id, request)
     return analyzer.start(req.repo_id)
 
 
 @app.get("/api/qa/{repo_id}")
-async def api_qa_status(repo_id: str, session: str = ""):
-    _guard(repo_id, session)
+async def api_qa_status(repo_id: str, request: Request):
+    _guard(repo_id, request)
     return analyzer.status(repo_id)
 
 
@@ -190,12 +197,11 @@ class ChatRequest(BaseModel):
     question: str
     repo_id: str = ""
     context: str = ""
-    session: str = ""
 
 
 @app.post("/api/chat")
-async def api_chat(req: ChatRequest):
-    _guard(req.repo_id, req.session)
+async def api_chat(req: ChatRequest, request: Request):
+    _guard(req.repo_id, request)
     state = await ORCH.answer(req.question, req.repo_id, req.context)
     sources = [{"file": h["metadata"]["file"],
                 "lines": f"{h['metadata']['start_line']}-{h['metadata']['end_line']}",
