@@ -197,12 +197,13 @@ class ChatRequest(BaseModel):
     question: str
     repo_id: str = ""
     context: str = ""
+    deep: bool = False   # 심층: Critic 검토 루프
 
 
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest, request: Request):
     _guard(req.repo_id, request)
-    state = await ORCH.answer(req.question, req.repo_id, req.context)
+    state = await ORCH.answer(req.question, req.repo_id, req.context, deep=req.deep)
     sources = [{"file": h["metadata"]["file"],
                 "lines": f"{h['metadata']['start_line']}-{h['metadata']['end_line']}",
                 "symbol": h["metadata"]["symbol"]} for h in state.hits]

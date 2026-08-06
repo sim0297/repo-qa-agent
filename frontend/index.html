@@ -238,7 +238,12 @@
 
   <aside class="drawer hidden" id="drawer">
     <div class="resizer" id="resizer"></div>
-    <div class="dhead">💬 코드 대화 <button class="x" onclick="toggleChat()">×</button></div>
+    <div class="dhead">💬 코드 대화
+      <label style="margin-left:auto;font-size:12px;font-weight:400;color:var(--muted);display:flex;align-items:center;gap:4px;cursor:pointer"
+        title="Critic 에이전트가 답변을 검토·재작성 (느리지만 정확)">
+        <input type="checkbox" id="deepChk"> 🔬 심층
+      </label>
+      <button class="x" onclick="toggleChat()">×</button></div>
     <div id="log"><div class="empty">코드에 대해 질문해 보세요.</div></div>
     <div id="ask">
       <input id="q" type="text" placeholder="코드에 대해 질문…" onkeydown="if(event.key==='Enter')send()" disabled>
@@ -606,12 +611,14 @@ async function send(){
   if(!text || !REPO) return;
   q.value=''; add('나','user', esc(text));
   document.getElementById('sendBtn').disabled = true;
-  const think = add('에이전트','', '<span class="status">생각 중… (gemma4:31b)</span>');
+  const deep = document.getElementById('deepChk').checked;
+  const think = add('에이전트','', '<span class="status">'+(deep?'심층 분석 중… (검토·재작성)':'생각 중…')+'</span>');
   try{
     const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({question:text, repo_id:REPO})});
+      body:JSON.stringify({question:text, repo_id:REPO, deep:deep})});
     const j = await r.json();
     let html = esc(j.answer||'(빈 응답)');
+    if(deep && j.trace) html += `<div class="status" style="margin-top:6px">🔬 ${esc((j.trace||[]).filter(t=>t.startsWith('critic')).join(', ')||'검토 완료')}</div>`;
     if(j.sources && j.sources.length)
       html += '<div>'+j.sources.slice(0,5).map(s=>
         `<div class="srcitem"><b>${esc(s.file)}</b>:${esc(s.lines)} ${esc(s.symbol||'')}</div>`).join('')+'</div>';

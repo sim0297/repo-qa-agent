@@ -161,6 +161,7 @@ async def _fetch_tarball(source: str, token: str) -> tuple[_P, str, str]:
 
 
 async def _index_dir(root: _P, repo_id: str, job: dict) -> dict:
+    job.setdefault("done", 0); job.setdefault("total", 0)  # 직접호출 방어
     job["phase"] = "파일 수집"
     files = collect_files(root)
 
