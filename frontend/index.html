@@ -89,6 +89,11 @@
   .tile .k { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
   .tile.high .v { color:var(--high); } .tile.medium .v { color:var(--medium); } .tile.low .v { color:var(--low); }
   .tile.new .v { color:var(--accent); } .tile.resolved .v { color:var(--ok); }
+  .tile { cursor:pointer; transition:box-shadow .12s,border-color .12s; }
+  .tile:hover { box-shadow:0 2px 8px rgba(31,35,40,.1); }
+  .tile.active { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-bg); }
+  .fcard.isresolved { opacity:.72; }
+  .fcard.isresolved .t { text-decoration:line-through; }
   .fcard.isnew { box-shadow:0 0 0 2px var(--accent-bg); }
   .newtag { font-size:9px; font-weight:800; color:#fff; background:var(--accent); border-radius:10px;
     padding:2px 7px; margin-left:6px; vertical-align:middle; }
@@ -492,45 +497,75 @@ async function pollQA(){
 }
 
 /* ── 결과 대시보드 ── */
+let RESOLVED = [], FILTER = 'all';
+
 function renderResults(j){
   const fs = FINDINGS = j.findings||[];
+  RESOLVED = j.resolved||[]; FILTER = 'all';
   document.getElementById('resultCard').style.display='';
   const cnt = {high:0,medium:0,low:0};
   fs.forEach(f=>{ cnt[(f.severity||'low').toLowerCase()]=(cnt[(f.severity||'low').toLowerCase()]||0)+1; });
   const diffTiles = j.compared
-    ? `<div class="tile new"><div class="v">${j.new_count||0}</div><div class="k">🆕 신규</div></div>
-       <div class="tile resolved"><div class="v">${j.resolved_count||0}</div><div class="k">✅ 해결됨</div></div>`
+    ? `<div class="tile new" data-f="new" onclick="setFilter('new')"><div class="v">${j.new_count||0}</div><div class="k">🆕 신규</div></div>
+       <div class="tile resolved" data-f="resolved" onclick="setFilter('resolved')"><div class="v">${j.resolved_count||0}</div><div class="k">✅ 해결됨</div></div>`
     : '';
   document.getElementById('tiles').innerHTML = `
-    <div class="tile high"><div class="v">${cnt.high||0}</div><div class="k">High 위험</div></div>
-    <div class="tile medium"><div class="v">${cnt.medium||0}</div><div class="k">Medium</div></div>
-    <div class="tile low"><div class="v">${cnt.low||0}</div><div class="k">Low</div></div>
-    <div class="tile"><div class="v">${fs.length}</div><div class="k">총 발견</div></div>
+    <div class="tile" data-f="all" onclick="setFilter('all')"><div class="v">${fs.length}</div><div class="k">총 발견</div></div>
+    <div class="tile high" data-f="high" onclick="setFilter('high')"><div class="v">${cnt.high||0}</div><div class="k">High 위험</div></div>
+    <div class="tile medium" data-f="medium" onclick="setFilter('medium')"><div class="v">${cnt.medium||0}</div><div class="k">Medium</div></div>
+    <div class="tile low" data-f="low" onclick="setFilter('low')"><div class="v">${cnt.low||0}</div><div class="k">Low</div></div>
     ${diffTiles}
-    <div class="tile"><div class="v">${Math.round(j.elapsed_sec||0)}s</div><div class="k">분석 시간${j.incremental?' (증분)':''}</div></div>`;
+    <div class="tile" style="cursor:default"><div class="v">${Math.round(j.elapsed_sec||0)}s</div><div class="k">분석 시간${j.incremental?' (증분)':''}</div></div>`;
+  setFilter('all');
+}
+
+function setFilter(f){
+  FILTER = f;
+  document.querySelectorAll('#tiles .tile').forEach(t=>t.classList.toggle('active', t.dataset.f===f));
+  renderFindingList();
+}
+
+const SEV_ICON = {high:'🔴',medium:'🟠',low:'⚪'};
+const SEV_LABEL = {high:'High — 즉시 조치 필요', medium:'Medium — 개선 권장', low:'Low — 참고'};
+
+function renderFindingList(){
   const el = document.getElementById('qa');
-  if(!fs.length){ el.innerHTML = '<div class="empty">🎉 발견사항 없음</div>'; return; }
+  if(FILTER==='resolved'){
+    if(!RESOLVED.length){ el.innerHTML='<div class="empty">해결된 항목 없음</div>'; return; }
+    el.innerHTML = `<div class="sev-section"><div class="sh" style="background:#eaf7ee;color:var(--ok)">✅ 해결됨 <span style="margin-left:auto">${RESOLVED.length}건</span></div>
+      <div class="sev-grid">${RESOLVED.map((f,i)=>fcard(f, `openResolved(${i})`, true)).join('')}</div></div>`;
+    return;
+  }
+  // 필터: all / high|medium|low / new
+  const idx = FINDINGS.map((f,i)=>[f,i]).filter(([f])=>{
+    const sev=(f.severity||'low').toLowerCase();
+    if(FILTER==='new') return f.status==='new';
+    if(['high','medium','low'].includes(FILTER)) return sev===FILTER;
+    return true;
+  });
+  if(!idx.length){ el.innerHTML='<div class="empty">해당 항목 없음</div>'; return; }
   const bySev = {high:[],medium:[],low:[]};
-  fs.forEach((f,i)=>{ bySev[(f.severity||'low').toLowerCase()]?.push([f,i]); });
-  const icon = {high:'🔴',medium:'🟠',low:'⚪'};
-  const label = {high:'High — 즉시 조치 필요', medium:'Medium — 개선 권장', low:'Low — 참고'};
+  idx.forEach(([f,i])=>bySev[(f.severity||'low').toLowerCase()]?.push([f,i]));
   el.innerHTML = ['high','medium','low'].filter(s=>bySev[s].length).map(s=>`
     <div class="sev-section ${s}">
-      <div class="sh">${icon[s]} ${label[s]} <span style="margin-left:auto">${bySev[s].length}건</span></div>
-      <div class="sev-grid">
-      ${bySev[s].map(([f,i])=>`
-        <div class="fcard ${s}${f.status==='new'?' isnew':''}" onclick="openFinding(${i})">
-          <span class="cat">${esc(f.category||'')}</span>${f.status==='new'?'<span class="newtag">신규</span>':''}
-          <div class="t">${esc(f.title||'')}</div>
-          <div class="loc">${esc(f.file||'')}:${esc(f.line||'')}</div>
-        </div>`).join('')}
-      </div>
+      <div class="sh">${SEV_ICON[s]} ${SEV_LABEL[s]} <span style="margin-left:auto">${bySev[s].length}건</span></div>
+      <div class="sev-grid">${bySev[s].map(([f,i])=>fcard(f, `openFinding(${i})`, false)).join('')}</div>
     </div>`).join('');
 }
 
+function fcard(f, onclick, resolved){
+  const s = (f.severity||'low').toLowerCase();
+  return `<div class="fcard ${s}${f.status==='new'?' isnew':''}${resolved?' isresolved':''}" onclick="${onclick}">
+    <span class="cat">${esc(f.category||'')}</span>${f.status==='new'?'<span class="newtag">신규</span>':''}${resolved?'<span class="newtag" style="background:var(--ok)">해결</span>':''}
+    <div class="t">${esc(f.title||'')}</div>
+    <div class="loc">${esc(f.file||'')}:${esc(f.line||'')}</div>
+  </div>`;
+}
+function openResolved(i){ if(RESOLVED[i]) openFindingObj(RESOLVED[i]); }
+
 /* ── 모달 ── */
-function openFinding(i){
-  const f = FINDINGS[i]; if(!f) return;
+function openFinding(i){ if(FINDINGS[i]) openFindingObj(FINDINGS[i]); }
+function openFindingObj(f){
   const sev = (f.severity||'low').toLowerCase();
   document.getElementById('modal').className = 'modal '+sev;
   const S = document.getElementById('mSev'); S.className='sev '+sev; S.textContent=sev;
