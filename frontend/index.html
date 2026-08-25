@@ -49,6 +49,14 @@
   .pbar { height:7px; background:var(--bg); border-radius:5px; overflow:hidden; }
   .pbar i { display:block; height:100%; background:var(--accent); border-radius:5px; transition:width .4s; }
   .ncard .ns { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:5px; }
+  .legend { display:flex; flex-direction:column; gap:7px; }
+  .lg { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); }
+  .lg .lgt { font-family:ui-monospace,monospace; font-size:10px; font-weight:700; color:var(--text);
+    background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:2px 8px; min-width:58px; text-align:center; }
+  #catLegend .lg { cursor:pointer; border-radius:8px; padding:3px 4px; margin:-3px -4px; }
+  #catLegend .lg:hover { background:var(--accent-bg); }
+  #catLegend .lg.active { background:var(--accent-bg); }
+  #catLegend .lg.active .lgt { border-color:var(--accent); color:var(--accent); }
 
   /* 메인 */
   .main { flex:1; overflow:auto; padding:26px 22px; min-width:0; }
@@ -195,6 +203,22 @@
   <aside class="sidebar">
     <h3>GPU 노드 현황</h3>
     <div id="nodes"><div class="empty">로딩…</div></div>
+
+    <h3 style="margin-top:22px">QA 카테고리 <span style="font-weight:400;text-transform:none;letter-spacing:0">(클릭 필터)</span></h3>
+    <div class="legend" id="catLegend">
+      <div class="lg" data-f="cat:bug" onclick="setFilter('cat:bug')"><span class="lgt">bug</span><span>로직 오류·버그</span></div>
+      <div class="lg" data-f="cat:security" onclick="setFilter('cat:security')"><span class="lgt">security</span><span>취약점·시크릿·인젝션</span></div>
+      <div class="lg" data-f="cat:smell" onclick="setFilter('cat:smell')"><span class="lgt">smell</span><span>중복·거대함수·강결합</span></div>
+      <div class="lg" data-f="cat:design" onclick="setFilter('cat:design')"><span class="lgt">design</span><span>설계·구조·UI 일관성</span></div>
+      <div class="lg" data-f="cat:doc" onclick="setFilter('cat:doc')"><span class="lgt">doc</span><span>문서·주석 부재</span></div>
+    </div>
+
+    <h3 style="margin-top:22px">위험도</h3>
+    <div class="legend">
+      <div class="lg"><span class="sev high">high</span><span>즉시 조치</span></div>
+      <div class="lg"><span class="sev medium">medium</span><span>개선 권장</span></div>
+      <div class="lg"><span class="sev low">low</span><span>참고</span></div>
+    </div>
   </aside>
 
   <div class="main">
@@ -522,6 +546,7 @@ function renderResults(j){
 function setFilter(f){
   FILTER = f;
   document.querySelectorAll('#tiles .tile').forEach(t=>t.classList.toggle('active', t.dataset.f===f));
+  document.querySelectorAll('#catLegend .lg').forEach(t=>t.classList.toggle('active', t.dataset.f===f));
   renderFindingList();
 }
 
@@ -540,6 +565,7 @@ function renderFindingList(){
   const idx = FINDINGS.map((f,i)=>[f,i]).filter(([f])=>{
     const sev=(f.severity||'low').toLowerCase();
     if(FILTER==='new') return f.status==='new';
+    if(FILTER.startsWith('cat:')) return (f.category||'').toLowerCase()===FILTER.slice(4);
     if(['high','medium','low'].includes(FILTER)) return sev===FILTER;
     return true;
   });
