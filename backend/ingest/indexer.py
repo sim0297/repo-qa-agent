@@ -176,9 +176,13 @@ async def _index_dir(root: _P, repo_id: str, job: dict) -> dict:
     deleted = [rel for rel in prev if rel not in cur]
 
     # 첫 인덱싱이면 통째로(안전), 아니면 증분
-    first = not prev
+    # 매니페스트는 있는데 벡터가 비었으면(desync) 전체 재인덱싱
+    first = not prev or vector.count(repo_id) == 0
     if first:
         vector.reset(repo_id)
+        cur, changed = {}, [(f, str(_P(f).relative_to(root))) for f in files]  # 전체 재청킹
+        for f, rel in changed:
+            cur[rel] = manifest.file_hash(f)
 
     # 바뀐/삭제 파일의 기존 청크 제거
     if not first:
